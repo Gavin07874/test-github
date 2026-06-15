@@ -2,13 +2,15 @@ import type {
   AppMode,
   CalibrationMetrics,
   CurrentSettings,
-  Recommendation
+  Recommendation,
+  ScreenAnalysisSummary
 } from "../types";
 
 interface WorkflowProgressProps {
   mode?: AppMode;
   settings?: CurrentSettings;
   calibrationMetrics?: CalibrationMetrics;
+  screenAnalysisSummary?: ScreenAnalysisSummary;
   recommendations: Recommendation[];
 }
 
@@ -22,6 +24,7 @@ export function WorkflowProgress({
   mode,
   settings,
   calibrationMetrics,
+  screenAnalysisSummary,
   recommendations
 }: WorkflowProgressProps) {
   const steps = [
@@ -44,6 +47,15 @@ export function WorkflowProgress({
       label: "Calibration",
       value: calibrationMetrics ? "Metrics saved" : "Run Calibration Lab",
       complete: Boolean(calibrationMetrics)
+    },
+    {
+      label: "Capture",
+      value: screenAnalysisSummary
+        ? `${screenAnalysisSummary.sampleCount} screen samples`
+        : calibrationMetrics
+          ? "Optional window metrics"
+          : "Awaiting calibration",
+      complete: Boolean(screenAnalysisSummary)
     },
     {
       label: "Report",

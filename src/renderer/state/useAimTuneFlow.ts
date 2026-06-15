@@ -7,6 +7,9 @@ import type {
   CalibrationMetrics,
   CurrentSettings,
   Recommendation,
+  ScreenAnalysisSummary,
+  ScreenCaptureSession,
+  ScreenFrameMetric,
   Session
 } from "../types";
 
@@ -16,6 +19,7 @@ export type PageId =
   | "controller"
   | "settings"
   | "calibration"
+  | "capture"
   | "report"
   | "dashboard";
 
@@ -25,6 +29,7 @@ export const flowPages: Array<{ id: PageId; label: string }> = [
   { id: "controller", label: "Controller" },
   { id: "settings", label: "Settings" },
   { id: "calibration", label: "Calibration" },
+  { id: "capture", label: "Capture" },
   { id: "report", label: "Report" },
   { id: "dashboard", label: "Dashboard" }
 ];
@@ -44,16 +49,24 @@ export function useAimTuneFlow() {
   const [session, setSession] = useState<Session | undefined>();
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [screenAnalysisSummary, setScreenAnalysisSummary] =
+    useState<ScreenAnalysisSummary | undefined>();
 
   useEffect(() => {
     async function loadInitialData() {
-      const [loadedSessions, latestSettings, latestMetrics, loadedRecommendations] =
-        await Promise.all([
-          storageService.listSessions(),
-          storageService.getLatestSettings(),
-          storageService.getLatestCalibrationMetrics(),
-          storageService.listRecommendations()
-        ]);
+      const [
+        loadedSessions,
+        latestSettings,
+        latestMetrics,
+        loadedRecommendations,
+        latestScreenSummary
+      ] = await Promise.all([
+        storageService.listSessions(),
+        storageService.getLatestSettings(),
+        storageService.getLatestCalibrationMetrics(),
+        storageService.listRecommendations(),
+        storageService.getLatestScreenAnalysisSummary()
+      ]);
 
       const latestSession = latestTelemetrySession(loadedSessions);
       setSessions(loadedSessions);
@@ -64,6 +77,7 @@ export function useAimTuneFlow() {
         setSettings(latestSettings);
       }
       if (latestMetrics) setCalibrationMetrics(latestMetrics);
+      if (latestScreenSummary) setScreenAnalysisSummary(latestScreenSummary);
       setRecommendations(latestMetrics ? loadedRecommendations.slice(0, 6) : []);
     }
 
@@ -79,6 +93,7 @@ export function useAimTuneFlow() {
     if (pageId === "home" || pageId === "mode" || pageId === "dashboard") return true;
     if (pageId === "controller" || pageId === "settings") return Boolean(mode);
     if (pageId === "calibration") return Boolean(mode && settings);
+    if (pageId === "capture") return Boolean(mode && settings && calibrationMetrics);
     if (pageId === "report") return Boolean(calibrationMetrics);
     return false;
   }
@@ -95,18 +110,19 @@ export function useAimTuneFlow() {
   async function saveSettings(nextSettings: CurrentSettings) {
     await storageService.saveSettings(nextSettings);
     setSettings(nextSettings);
+    setCalibrationMetrics(undefined);
+    setScreenAnalysisSummary(undefined);
     setRecommendations([]);
     setPage("calibration");
   }
 
-  async function saveCalibration(nextMetrics: CalibrationMetrics) {
-    await storageService.saveCalibrationMetrics(nextMetrics);
-    setCalibrationMetrics(nextMetrics);
-
+  async function saveGeneratedRecommendations(
+    nextMetrics: CalibrationMetrics,
+    nextScreenSummary?: ScreenAnalysisSummary
+  ) {
     if (!settings || !mode) {
       setRecommendations([]);
-      setPage("report");
-      return;
+      return [];
     }
 
     const generated = generateRecommendations({
@@ -116,11 +132,45 @@ export function useAimTuneFlow() {
         sessionId: nextMetrics.sessionId
       },
       calibrationMetrics: nextMetrics,
+      screenAnalysisSummary: nextScreenSummary,
       sessions
     });
 
     await storageService.saveRecommendations(generated);
     setRecommendations(generated);
+    return generated;
+  }
+
+  async function saveCalibration(nextMetrics: CalibrationMetrics) {
+    await storageService.saveCalibrationMetrics(nextMetrics);
+    setCalibrationMetrics(nextMetrics);
+    setScreenAnalysisSummary(undefined);
+    setRecommendations([]);
+    setPage("capture");
+  }
+
+  async function saveScreenCapture(
+    captureSession: ScreenCaptureSession,
+    frameMetrics: ScreenFrameMetric[],
+    summary: ScreenAnalysisSummary
+  ) {
+    await Promise.all([
+      storageService.saveScreenCaptureSession(captureSession),
+      storageService.saveScreenFrameMetrics(frameMetrics),
+      storageService.saveScreenAnalysisSummary(summary)
+    ]);
+    setScreenAnalysisSummary(summary);
+
+    if (calibrationMetrics) {
+      await saveGeneratedRecommendations(calibrationMetrics, summary);
+    }
+    setPage("report");
+  }
+
+  async function skipScreenCapture() {
+    if (calibrationMetrics) {
+      await saveGeneratedRecommendations(calibrationMetrics, screenAnalysisSummary);
+    }
     setPage("report");
   }
 
@@ -129,6 +179,7 @@ export function useAimTuneFlow() {
     setMode(undefined);
     setSettings(undefined);
     setCalibrationMetrics(undefined);
+    setScreenAnalysisSummary(undefined);
     setSession(undefined);
     setRecommendations([]);
     setSessions([]);
@@ -140,6 +191,7 @@ export function useAimTuneFlow() {
     mode,
     settings,
     calibrationMetrics,
+    screenAnalysisSummary,
     session,
     recommendations,
     selectedLabel,
@@ -148,6 +200,8 @@ export function useAimTuneFlow() {
     chooseMode,
     saveSettings,
     saveCalibration,
+    saveScreenCapture,
+    skipScreenCapture,
     clearLocalData
   };
 }

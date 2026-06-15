@@ -13,9 +13,12 @@ export function RecommendationReport({
   return (
     <main className="page">
       <div className="page-heading">
-        <span className="eyebrow">Step 5</span>
+        <span className="eyebrow">Step 7</span>
         <h2>Recommendation report</h2>
-        <p>Exact setting changes generated only after Calibration Lab metrics exist.</p>
+        <p>
+          Exact setting changes generated from Calibration Lab metrics, with
+          window-capture signals used only as supporting evidence.
+        </p>
       </div>
 
       {recommendations.length ? (

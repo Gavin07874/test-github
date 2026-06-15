@@ -255,7 +255,7 @@ export function CalibrationLab({
           <h2>Calibration lab</h2>
           <p>
             Choose Quick or Full Calibration. AimTune moves through the tests
-            automatically and opens the report when finished.
+            automatically and opens Gameplay Capture when finished.
           </p>
         </div>
 
@@ -357,7 +357,7 @@ export function CalibrationLab({
         ) : null}
         {runPhase === "saving" ? (
           <span className="calibration-action-note">
-            Saving metrics and generating exact recommendations.
+            Saving metrics and opening Gameplay Capture.
           </span>
         ) : null}
       </div>

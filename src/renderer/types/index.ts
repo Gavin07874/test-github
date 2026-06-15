@@ -53,6 +53,60 @@ export interface InputSample {
   buttons: number[];
 }
 
+export interface CapturableWindowSource {
+  id: string;
+  name: string;
+}
+
+export type ScreenCaptureSessionStatus =
+  | "running"
+  | "paused"
+  | "stopped"
+  | "partial"
+  | "error";
+
+export interface ScreenCaptureSession {
+  id: string;
+  gameName: string;
+  mode: AppMode;
+  sourceName: string;
+  startedAt: string;
+  endedAt?: string;
+  durationSeconds?: number;
+  status: ScreenCaptureSessionStatus;
+}
+
+export interface ScreenFrameMetric {
+  id: string;
+  sessionId: string;
+  timestamp: number;
+  brightness: number;
+  sceneChangeScore: number;
+  fullMotionScore: number;
+  centerMotionScore: number;
+  stabilityScore: number;
+  controllerStickMagnitude: number;
+  adsActive: boolean;
+  fireActive: boolean;
+}
+
+export interface ScreenAnalysisSummary {
+  id: string;
+  sessionId: string;
+  averageBrightness: number;
+  averageSceneChangeScore: number;
+  averageFullMotionScore: number;
+  averageCenterMotionScore: number;
+  averageStabilityScore: number;
+  peakInstabilityScore: number;
+  instabilityWindowCount: number;
+  controllerScreenCorrelation: number;
+  adsInstabilityScore: number;
+  firingInstabilityScore: number;
+  confidenceContribution: number;
+  sampleCount: number;
+}
+
 export interface PostGameStats {
   id: string;
   sessionId: string;
@@ -101,6 +155,7 @@ export interface CalibrationMetrics {
 export type RecommendationSource =
   | "calibration_lab"
   | "controller_telemetry"
+  | "screen_analysis"
   | "post_game_stats"
   | "user_notes"
   | "repeated_pattern";

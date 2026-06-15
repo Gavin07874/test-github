@@ -16,6 +16,8 @@ import type {
   CalibrationMetrics,
   PostGameStats,
   Recommendation,
+  ScreenAnalysisSummary,
+  ScreenCaptureSession,
   Session
 } from "../types";
 
@@ -37,21 +39,37 @@ export function Dashboard({ onResetData }: DashboardProps) {
   const [stats, setStats] = useState<PostGameStats[]>([]);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [metrics, setMetrics] = useState<CalibrationMetrics[]>([]);
+  const [screenCaptureSessions, setScreenCaptureSessions] = useState<
+    ScreenCaptureSession[]
+  >([]);
+  const [screenAnalysisSummaries, setScreenAnalysisSummaries] = useState<
+    ScreenAnalysisSummary[]
+  >([]);
   const [resetArmed, setResetArmed] = useState(false);
   const [exportStatus, setExportStatus] = useState("Ready");
 
   const loadDashboard = useCallback(async () => {
-    const [loadedSessions, loadedStats, loadedRecommendations, loadedMetrics] =
-      await Promise.all([
+    const [
+      loadedSessions,
+      loadedStats,
+      loadedRecommendations,
+      loadedMetrics,
+      loadedCaptureSessions,
+      loadedScreenSummaries
+    ] = await Promise.all([
         storageService.listSessions(),
         storageService.listPostGameStats(),
         storageService.listRecommendations(),
-        storageService.listCalibrationMetrics()
+        storageService.listCalibrationMetrics(),
+        storageService.listScreenCaptureSessions(),
+        storageService.listScreenAnalysisSummaries()
       ]);
     setSessions(loadedSessions);
     setStats(loadedStats);
     setRecommendations(loadedRecommendations);
     setMetrics(loadedMetrics);
+    setScreenCaptureSessions(loadedCaptureSessions);
+    setScreenAnalysisSummaries(loadedScreenSummaries);
   }, []);
 
   useEffect(() => {
@@ -64,22 +82,32 @@ export function Dashboard({ onResetData }: DashboardProps) {
       loadedStats,
       loadedRecommendations,
       loadedMetrics,
-      loadedSettings
+      loadedSettings,
+      loadedCaptureSessions,
+      loadedScreenMetrics,
+      loadedScreenSummaries
     ] = await Promise.all([
       storageService.listSessions(),
       storageService.listPostGameStats(),
       storageService.listRecommendations(),
       storageService.listCalibrationMetrics(),
-      storageService.listSettings()
+      storageService.listSettings(),
+      storageService.listScreenCaptureSessions(),
+      storageService.listScreenFrameMetrics(),
+      storageService.listScreenAnalysisSummaries()
     ]);
     const snapshot = {
       exportedAt: new Date().toISOString(),
-      safetyBoundary: "Local AimTune AI data only. No game files or game memory.",
+      safetyBoundary:
+        "Local AimTune AI data only. No screenshots, clips, audio, game files, or game memory.",
       sessions: loadedSessions,
       postGameStats: loadedStats,
       recommendations: loadedRecommendations,
       calibrationMetrics: loadedMetrics,
-      settings: loadedSettings
+      settings: loadedSettings,
+      screenCaptureSessions: loadedCaptureSessions,
+      screenFrameMetrics: loadedScreenMetrics,
+      screenAnalysisSummaries: loadedScreenSummaries
     };
     const blob = new Blob([JSON.stringify(snapshot, null, 2)], {
       type: "application/json"
@@ -105,6 +133,7 @@ export function Dashboard({ onResetData }: DashboardProps) {
 
   const calibrationComplete = metrics.length > 0;
   const visibleRecommendations = calibrationComplete ? recommendations : [];
+  const latestScreenSummary = screenAnalysisSummaries[screenAnalysisSummaries.length - 1];
 
   const summary = useMemo(() => {
     const findLatest = (terms: string[]) =>
@@ -142,9 +171,20 @@ export function Dashboard({ onResetData }: DashboardProps) {
         ? String(latestLook.recommendedValue)
         : "N/A",
       currentAdsSensitivity: latestAim ? String(latestAim.recommendedValue) : "N/A",
-      currentDeadzone: latestDeadzone ? String(latestDeadzone.recommendedValue) : "N/A"
+      currentDeadzone: latestDeadzone ? String(latestDeadzone.recommendedValue) : "N/A",
+      captureSessions: screenCaptureSessions.length,
+      screenStability: latestScreenSummary
+        ? `${Math.round(latestScreenSummary.averageStabilityScore)}%`
+        : "N/A"
     };
-  }, [calibrationComplete, sessions.length, stats, visibleRecommendations]);
+  }, [
+    calibrationComplete,
+    latestScreenSummary,
+    screenCaptureSessions.length,
+    sessions.length,
+    stats,
+    visibleRecommendations
+  ]);
 
   const performanceData = stats.map((item, index) => ({
     name: `S${index + 1}`,
@@ -171,6 +211,13 @@ export function Dashboard({ onResetData }: DashboardProps) {
     ads: item.adsJitter
   }));
 
+  const screenData = screenAnalysisSummaries.map((item, index) => ({
+    name: `G${index + 1}`,
+    stability: item.averageStabilityScore,
+    centerMotion: item.averageCenterMotionScore,
+    correlation: item.controllerScreenCorrelation
+  }));
+
   return (
     <main className="page">
       <div className="page-heading">
@@ -191,6 +238,8 @@ export function Dashboard({ onResetData }: DashboardProps) {
         <StatCard label="Current look" value={summary.currentSensitivity} />
         <StatCard label="Current aim" value={summary.currentAdsSensitivity} />
         <StatCard label="Current deadzone" value={summary.currentDeadzone} />
+        <StatCard label="Capture sessions" value={summary.captureSessions} />
+        <StatCard label="Screen stability" value={summary.screenStability} />
       </div>
 
       <div className="dashboard-grid">
@@ -265,6 +314,24 @@ export function Dashboard({ onResetData }: DashboardProps) {
               <Line type="monotone" dataKey="drift" stroke="#e05d3f" strokeWidth={2} />
               <Line type="monotone" dataKey="tracking" stroke="#0c8f7a" strokeWidth={2} />
               <Line type="monotone" dataKey="ads" stroke="#7b61ff" strokeWidth={2} />
+            </LineChart>
+          </ResponsiveContainer>
+        </section>
+
+        <section className="chart-panel">
+          <div className="panel__heading">
+            <span>Gameplay capture summary</span>
+            <strong>{screenData.length} entries</strong>
+          </div>
+          <ResponsiveContainer width="100%" height={240}>
+            <LineChart data={screenData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="name" />
+              <YAxis />
+              <Tooltip />
+              <Line type="monotone" dataKey="stability" stroke="#0c8f7a" strokeWidth={2} />
+              <Line type="monotone" dataKey="centerMotion" stroke="#e05d3f" strokeWidth={2} />
+              <Line type="monotone" dataKey="correlation" stroke="#7b61ff" strokeWidth={2} />
             </LineChart>
           </ResponsiveContainer>
         </section>

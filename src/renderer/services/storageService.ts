@@ -5,8 +5,13 @@ import type {
   InputSample,
   PostGameStats,
   Recommendation,
+  ScreenAnalysisSummary,
+  ScreenCaptureSession,
+  ScreenFrameMetric,
   Session
 } from "../types";
+
+export const storageSchemaVersion = 2;
 
 class AimTuneDatabase extends Dexie {
   sessions!: Table<Session, string>;
@@ -15,6 +20,9 @@ class AimTuneDatabase extends Dexie {
   calibrationMetrics!: Table<CalibrationMetrics, string>;
   postGameStats!: Table<PostGameStats, string>;
   recommendations!: Table<Recommendation, string>;
+  screenCaptureSessions!: Table<ScreenCaptureSession, string>;
+  screenFrameMetrics!: Table<ScreenFrameMetric, string>;
+  screenAnalysisSummaries!: Table<ScreenAnalysisSummary, string>;
 
   constructor() {
     super("aimtune-ai");
@@ -25,6 +33,17 @@ class AimTuneDatabase extends Dexie {
       calibrationMetrics: "id, sessionId",
       postGameStats: "id, sessionId",
       recommendations: "id, sessionId, settingName, confidenceScore"
+    });
+    this.version(storageSchemaVersion).stores({
+      sessions: "id, mode, platform, gameName, startedAt, endedAt",
+      inputSamples: "id, sessionId, timestamp",
+      settings: "id, sessionId, gameName, platform",
+      calibrationMetrics: "id, sessionId",
+      postGameStats: "id, sessionId",
+      recommendations: "id, sessionId, settingName, confidenceScore",
+      screenCaptureSessions: "id, mode, gameName, sourceName, startedAt, endedAt, status",
+      screenFrameMetrics: "id, sessionId, timestamp",
+      screenAnalysisSummaries: "id, sessionId, sampleCount"
     });
   }
 }
@@ -83,6 +102,33 @@ export const storageService = {
   async listRecommendations() {
     return db.recommendations.orderBy("id").reverse().toArray();
   },
+  async saveScreenCaptureSession(session: ScreenCaptureSession) {
+    await db.screenCaptureSessions.put(session);
+    return session;
+  },
+  async listScreenCaptureSessions() {
+    return db.screenCaptureSessions.orderBy("startedAt").reverse().toArray();
+  },
+  async saveScreenFrameMetrics(metrics: ScreenFrameMetric[]) {
+    if (metrics.length) await db.screenFrameMetrics.bulkPut(metrics);
+    return metrics;
+  },
+  async listScreenFrameMetrics(sessionId?: string) {
+    if (sessionId) {
+      return db.screenFrameMetrics.where("sessionId").equals(sessionId).toArray();
+    }
+    return db.screenFrameMetrics.orderBy("timestamp").toArray();
+  },
+  async saveScreenAnalysisSummary(summary: ScreenAnalysisSummary) {
+    await db.screenAnalysisSummaries.put(summary);
+    return summary;
+  },
+  async getLatestScreenAnalysisSummary() {
+    return db.screenAnalysisSummaries.orderBy("id").last();
+  },
+  async listScreenAnalysisSummaries() {
+    return db.screenAnalysisSummaries.orderBy("id").toArray();
+  },
   async clearAllData() {
     await db.transaction(
       "rw",
@@ -92,7 +138,10 @@ export const storageService = {
         db.settings,
         db.calibrationMetrics,
         db.postGameStats,
-        db.recommendations
+        db.recommendations,
+        db.screenCaptureSessions,
+        db.screenFrameMetrics,
+        db.screenAnalysisSummaries
       ],
       async () => {
         await Promise.all([
@@ -101,7 +150,10 @@ export const storageService = {
           db.settings.clear(),
           db.calibrationMetrics.clear(),
           db.postGameStats.clear(),
-          db.recommendations.clear()
+          db.recommendations.clear(),
+          db.screenCaptureSessions.clear(),
+          db.screenFrameMetrics.clear(),
+          db.screenAnalysisSummaries.clear()
         ]);
       }
     );

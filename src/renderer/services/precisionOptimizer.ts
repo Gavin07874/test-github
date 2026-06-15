@@ -5,6 +5,7 @@ import type {
   PostGameStats,
   Recommendation,
   RecommendationSource,
+  ScreenAnalysisSummary,
   Session
 } from "../types";
 import {
@@ -19,6 +20,7 @@ export interface OptimizerInput {
   mode: AppMode;
   settings: CurrentSettings;
   calibrationMetrics?: CalibrationMetrics;
+  screenAnalysisSummary?: ScreenAnalysisSummary;
   postGameStats?: PostGameStats;
   sessions?: Session[];
   repeatedPatternCount?: number;
@@ -133,34 +135,68 @@ function sensitivityPercentChange(metrics: CalibrationMetrics) {
   return { change, cause, overshoot, undershoot };
 }
 
-function adsPercentChange(metrics: CalibrationMetrics, notes: string) {
+function screenSupportMetrics(summary?: ScreenAnalysisSummary): Record<string, number | string> {
+  if (!summary) return {};
+  return {
+    "Capture samples": summary.sampleCount,
+    "Screen stability": `${summary.averageStabilityScore}%`,
+    "Center motion": `${summary.averageCenterMotionScore}%`,
+    "Controller/screen correlation": `${summary.controllerScreenCorrelation}%`
+  };
+}
+
+function adsPercentChange(
+  metrics: CalibrationMetrics,
+  notes: string,
+  screenAnalysisSummary?: ScreenAnalysisSummary
+) {
   let change = 0;
   let cause = "No dominant ADS issue";
+  let source: RecommendationSource | undefined;
 
   if (metrics.adsJitter > 0.22) {
     change = -7;
     cause = "Severe ADS jitter";
+    source = "calibration_lab";
   } else if (metrics.adsJitter > 0.14) {
     change = -5;
     cause = "Medium ADS jitter";
+    source = "calibration_lab";
   }
 
   if (metrics.adsOvershootRate > 30) {
     change = Math.min(change, -5);
     cause = "ADS overshoot";
+    source = "calibration_lab";
+  }
+
+  if (
+    screenAnalysisSummary &&
+    screenAnalysisSummary.sampleCount >= 6 &&
+    Math.max(
+      screenAnalysisSummary.adsInstabilityScore,
+      screenAnalysisSummary.firingInstabilityScore
+    ) > 24 &&
+    change === 0
+  ) {
+    change = -3;
+    cause = "Captured ADS/firing instability";
+    source = "screen_analysis";
   }
 
   if (includesAny(notes, ["lags behind", "tracking slow", "too slow"]) && change === 0) {
     change = 3;
     cause = "Tracking lag behind target";
+    source = "user_notes";
   }
 
   if (includesAny(notes, ["ahead", "overcorrect", "too fast"])) {
     change = Math.min(change, -3);
     cause = "Tracking moves ahead of target";
+    source = "user_notes";
   }
 
-  return { change, cause };
+  return { change, cause, source };
 }
 
 function responseCurveRecommendation(
@@ -231,6 +267,7 @@ function responseCurveRecommendation(
 export function generateRecommendations(input: OptimizerInput): Recommendation[] {
   const settings = input.settings;
   const metrics = input.calibrationMetrics;
+  const screenAnalysisSummary = input.screenAnalysisSummary;
   const notes = input.postGameStats?.notes ?? "";
   const profile = getGameProfile(settings.gameName, settings.platform);
   const sessionId =
@@ -240,15 +277,18 @@ export function generateRecommendations(input: OptimizerInput): Recommendation[]
     sessions.some((existingSession) => existingSession.hasControllerTelemetry) ||
     Boolean(metrics);
 
-  const confidenceScore = calculateConfidence({
-    mode: input.mode,
-    sessions,
-    calibrationMetrics: metrics,
-    postGameStats: input.postGameStats,
-    hasControllerTelemetry,
-    repeatedPatternCount: input.repeatedPatternCount,
-    metricsConflict: hasConflictingMetrics(metrics)
-  });
+  const confidenceScore = Math.min(
+    98,
+    calculateConfidence({
+      mode: input.mode,
+      sessions,
+      calibrationMetrics: metrics,
+      postGameStats: input.postGameStats,
+      hasControllerTelemetry,
+      repeatedPatternCount: input.repeatedPatternCount,
+      metricsConflict: hasConflictingMetrics(metrics)
+    }) + (metrics && screenAnalysisSummary ? screenAnalysisSummary.confidenceContribution : 0)
+  );
 
   const recommendations: Recommendation[] = [];
 
@@ -340,7 +380,8 @@ export function generateRecommendations(input: OptimizerInput): Recommendation[]
         "Flick overshoot rate": `${metrics.flickOvershootRate}%`,
         "Micro-aim undershoot rate": `${metrics.microAimUndershootRate}%`,
         "Max stick usage": `${metrics.maxStickUsagePercent}%`,
-        "Average settle time": `${metrics.microAimSettleTime}ms`
+        "Average settle time": `${metrics.microAimSettleTime}ms`,
+        ...screenSupportMetrics(screenAnalysisSummary)
       },
       severityPercent: sensitivity.change
     });
@@ -360,14 +401,15 @@ export function generateRecommendations(input: OptimizerInput): Recommendation[]
       supportingMetrics: {
         "Main cause": sensitivity.cause,
         "Turn correction count": metrics.turnCorrectionCount,
-        "Flick undershoot rate": `${metrics.flickUndershootRate}%`
+        "Flick undershoot rate": `${metrics.flickUndershootRate}%`,
+        ...screenSupportMetrics(screenAnalysisSummary)
       },
       severityPercent: sensitivity.change * 0.75
     });
     if (verticalRecommendation) recommendations.push(verticalRecommendation);
   }
 
-  const ads = adsPercentChange(metrics, notes);
+  const ads = adsPercentChange(metrics, notes, screenAnalysisSummary);
   if (ads.change !== 0) {
     const adsBounds = getSettingBounds(profile, "adsSensitivity");
     const recommendedAds = clampAndRound(
@@ -386,13 +428,14 @@ export function generateRecommendations(input: OptimizerInput): Recommendation[]
         ads.change < 0
           ? "ADS movement is unstable or overshooting. Lowering ADS sensitivity should make target holding and firing stability easier."
           : "Tracking appears to lag behind the target. A small ADS increase should help the reticle keep up.",
-      source: ads.change > 0 ? "user_notes" : "calibration_lab",
+      source: ads.source ?? (ads.change > 0 ? "user_notes" : "calibration_lab"),
       supportingMetrics: {
         "Main cause": ads.cause,
         "ADS jitter": metrics.adsJitter,
         "ADS overshoot rate": `${metrics.adsOvershootRate}%`,
         "ADS tracking error": metrics.adsTrackingError,
-        "Firing stability score": metrics.firingStabilityScore
+        "Firing stability score": metrics.firingStabilityScore,
+        ...screenSupportMetrics(screenAnalysisSummary)
       },
       severityPercent: ads.change
     });

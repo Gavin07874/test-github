@@ -1,16 +1,53 @@
-import { app, BrowserWindow, shell } from "electron";
+import {
+  app,
+  BrowserWindow,
+  desktopCapturer,
+  ipcMain,
+  shell,
+  systemPreferences,
+  type DesktopCapturerSource
+} from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  isCapturableWindowSource,
   isAllowedDevServerUrl,
   isAllowedExternalUrl,
-  isTrustedAppNavigation
+  isTrustedAppNavigation,
+  validateDisplayMediaRequest
 } from "./security.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
+let selectedCaptureSourceId: string | undefined;
+
+function safeSource(source: DesktopCapturerSource) {
+  return {
+    id: source.id,
+    name: source.name
+  };
+}
+
+async function listWindowSources() {
+  const sources = await desktopCapturer.getSources({
+    types: ["window"],
+    thumbnailSize: { width: 0, height: 0 },
+    fetchWindowIcons: false
+  });
+
+  return sources.map(safeSource).filter(isCapturableWindowSource);
+}
+
+function captureAccessStatus() {
+  if (process.platform !== "darwin") return "granted";
+  return systemPreferences.getMediaAccessStatus("screen");
+}
+
+function isTrustedIpcSender(url?: string) {
+  return Boolean(url && isTrustedAppNavigation(url, isDev));
+}
 
 function createMainWindow() {
   const preload = path.join(__dirname, "../main/preload.cjs");
@@ -24,6 +61,7 @@ function createMainWindow() {
     webPreferences: {
       preload,
       allowRunningInsecureContent: false,
+      backgroundThrottling: false,
       contextIsolation: true,
       devTools: isDev,
       nodeIntegration: false,
@@ -55,6 +93,44 @@ function createMainWindow() {
     }
   );
   window.webContents.session.setPermissionCheckHandler(() => false);
+  window.webContents.session.setDisplayMediaRequestHandler(
+    (request, callback) => {
+      const decision = validateDisplayMediaRequest(
+        {
+          securityOrigin: request.securityOrigin,
+          videoRequested: request.videoRequested,
+          audioRequested: request.audioRequested,
+          userGesture: request.userGesture,
+          selectedSourceId: selectedCaptureSourceId
+        },
+        isDev
+      );
+
+      if (!decision.allowed) {
+        callback({});
+        return;
+      }
+
+      void listWindowSources()
+        .then((sources) => {
+          const source = sources.find(
+            (candidate) => candidate.id === selectedCaptureSourceId
+          );
+          if (!source) {
+            selectedCaptureSourceId = undefined;
+            callback({});
+            return;
+          }
+
+          callback({ video: source });
+        })
+        .catch(() => {
+          selectedCaptureSourceId = undefined;
+          callback({});
+        });
+    },
+    { useSystemPicker: false }
+  );
 
   if (isDev && process.env.VITE_DEV_SERVER_URL) {
     if (!isAllowedDevServerUrl(process.env.VITE_DEV_SERVER_URL)) {
@@ -69,6 +145,26 @@ function createMainWindow() {
 }
 
 app.whenReady().then(() => {
+  ipcMain.handle("capture:list-window-sources", async (event) => {
+    if (!isTrustedIpcSender(event.senderFrame?.url)) return [];
+    return listWindowSources();
+  });
+
+  ipcMain.handle("capture:select-source", async (event, sourceId: unknown) => {
+    if (!isTrustedIpcSender(event.senderFrame?.url)) return false;
+    if (typeof sourceId !== "string") return false;
+
+    const sources = await listWindowSources();
+    const sourceExists = sources.some((source) => source.id === sourceId);
+    selectedCaptureSourceId = sourceExists ? sourceId : undefined;
+    return sourceExists;
+  });
+
+  ipcMain.handle("capture:screen-access-status", (event) => {
+    if (!isTrustedIpcSender(event.senderFrame?.url)) return "denied";
+    return captureAccessStatus();
+  });
+
   createMainWindow();
 
   app.on("activate", () => {

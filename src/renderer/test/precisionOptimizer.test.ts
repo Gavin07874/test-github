@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { generateRecommendations } from "../services/precisionOptimizer";
-import type { CalibrationMetrics, CurrentSettings, Session } from "../types";
+import type {
+  CalibrationMetrics,
+  CurrentSettings,
+  ScreenAnalysisSummary,
+  Session
+} from "../types";
 
 const settings: CurrentSettings = {
   id: "settings-1",
@@ -54,6 +59,23 @@ const sessions: Session[] = [1, 2, 3].map((index) => ({
   startedAt: new Date(index).toISOString(),
   hasControllerTelemetry: true
 }));
+
+const screenSummary: ScreenAnalysisSummary = {
+  id: "screen-summary-1",
+  sessionId: "session-1",
+  averageBrightness: 62,
+  averageSceneChangeScore: 12,
+  averageFullMotionScore: 18,
+  averageCenterMotionScore: 34,
+  averageStabilityScore: 58,
+  peakInstabilityScore: 62,
+  instabilityWindowCount: 4,
+  controllerScreenCorrelation: 71,
+  adsInstabilityScore: 32,
+  firingInstabilityScore: 35,
+  confidenceContribution: 6,
+  sampleCount: 18
+};
 
 describe("precisionOptimizer", () => {
   it("applies exact percentage sensitivity decreases for overshoot", () => {
@@ -164,6 +186,42 @@ describe("precisionOptimizer", () => {
     });
 
     expect(recommendations).toEqual([]);
+  });
+
+  it("does not create recommendations from screen metrics alone", () => {
+    const recommendations = generateRecommendations({
+      mode: "pc",
+      settings,
+      screenAnalysisSummary: screenSummary,
+      sessions
+    });
+
+    expect(recommendations).toEqual([]);
+  });
+
+  it("uses screen analysis as supporting evidence after calibration exists", () => {
+    const recommendations = generateRecommendations({
+      mode: "pc",
+      settings: {
+        ...settings,
+        adsSensitivity: 50
+      },
+      calibrationMetrics: {
+        ...metrics,
+        adsJitter: 0.08,
+        adsOvershootRate: 10
+      },
+      screenAnalysisSummary: screenSummary,
+      sessions
+    });
+
+    const ads = recommendations.find(
+      (item) => item.settingName === "ADS Look Sensitivity"
+    );
+
+    expect(ads?.source).toBe("screen_analysis");
+    expect(ads?.supportingMetrics["Screen stability"]).toBe("58%");
+    expect(ads?.supportingMetrics["Capture samples"]).toBe(18);
   });
 
   it("uses The Last of Us Part II setting labels in recommendations", () => {

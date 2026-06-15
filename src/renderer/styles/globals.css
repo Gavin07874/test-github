@@ -158,7 +158,7 @@ button:disabled {
 
 .workflow-progress {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 10px;
   max-width: 1220px;
   margin: 0 auto;
@@ -1415,6 +1415,146 @@ textarea {
   background: rgba(214, 149, 0, 0.1);
 }
 
+.page--capture {
+  width: 100%;
+}
+
+.capture-privacy-panel,
+.capture-status-panel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  box-shadow: 0 10px 25px rgba(42, 34, 26, 0.04);
+}
+
+.capture-privacy-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 16px 18px;
+  border-color: rgba(12, 143, 122, 0.28);
+  background:
+    linear-gradient(135deg, rgba(12, 143, 122, 0.1), rgba(224, 93, 63, 0.06)),
+    var(--surface-strong);
+}
+
+.capture-privacy-panel > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.capture-privacy-panel span {
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.capture-layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.85fr) minmax(0, 1.15fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.capture-source-list {
+  display: grid;
+  gap: 10px;
+}
+
+.capture-source-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  color: var(--ink);
+  background: #faf7f1;
+  text-align: left;
+}
+
+.capture-source-card span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 800;
+}
+
+.capture-source-card strong {
+  color: var(--teal-dark);
+  font-size: 13px;
+}
+
+.capture-source-card:hover,
+.capture-source-card.is-selected {
+  border-color: var(--teal);
+  background: rgba(12, 143, 122, 0.08);
+  box-shadow: 0 0 0 3px rgba(12, 143, 122, 0.12);
+}
+
+.capture-status-panel {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.capture-meter-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.capture-state-strip {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: #faf7f1;
+}
+
+.capture-state-strip > span {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: #c9c1b6;
+}
+
+.capture-state-strip > span.is-live {
+  background: var(--teal);
+  box-shadow: 0 0 0 5px rgba(12, 143, 122, 0.14);
+}
+
+.capture-state-strip div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.capture-state-strip strong,
+.capture-state-strip small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.capture-state-strip small,
+.empty-state {
+  color: var(--text-muted);
+}
+
+.empty-state {
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 18px;
+  background: #faf7f1;
+  line-height: 1.45;
+}
+
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1538,9 +1678,15 @@ textarea {
   }
 
   .lab-layout,
+  .capture-layout,
   .controller-grid,
   .dashboard-grid {
     grid-template-columns: 1fr;
+  }
+
+  .capture-privacy-panel,
+  .capture-meter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .target-canvas {
@@ -1612,6 +1758,8 @@ textarea {
   .mode-grid,
   .stat-grid,
   .workflow-progress,
+  .capture-privacy-panel,
+  .capture-meter-grid,
   .settings-hero,
   .settings-console__top,
   .settings-field-grid,

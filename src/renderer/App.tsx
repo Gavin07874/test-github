@@ -2,6 +2,7 @@ import { Dashboard } from "./pages/Dashboard";
 import { WorkflowProgress } from "./components/WorkflowProgress";
 import { CalibrationLab } from "./pages/CalibrationLab";
 import { ControllerTest } from "./pages/ControllerTest";
+import { GameplayCapture } from "./pages/GameplayCapture";
 import { Home } from "./pages/Home";
 import { ModeSelect } from "./pages/ModeSelect";
 import { RecommendationReport } from "./pages/RecommendationReport";
@@ -50,6 +51,18 @@ export function App() {
         />
       );
     }
+    if (flow.page === "capture") {
+      return (
+        <GameplayCapture
+          mode={flow.mode}
+          settings={flow.settings}
+          onComplete={(result) =>
+            flow.saveScreenCapture(result.session, result.metrics, result.summary)
+          }
+          onSkip={flow.skipScreenCapture}
+        />
+      );
+    }
     if (flow.page === "report") {
       return (
         <RecommendationReport
@@ -82,8 +95,9 @@ export function App() {
           ))}
         </nav>
         <div className="safety-note">
-          Calibration and controller telemetry only. No game memory, input
-          automation, macros, recoil scripts, or anti-cheat bypasses.
+          Calibration, controller telemetry, and selected-window metrics only.
+          No saved frames, game memory, macros, input automation, or anti-cheat
+          bypasses.
         </div>
       </aside>
       <div
@@ -93,6 +107,7 @@ export function App() {
           mode={flow.mode}
           settings={flow.settings}
           calibrationMetrics={flow.calibrationMetrics}
+          screenAnalysisSummary={flow.screenAnalysisSummary}
           recommendations={flow.recommendations}
         />
         {renderPage()}
