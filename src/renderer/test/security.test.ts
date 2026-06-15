@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isCapturableWindowSource,
+  validateDisplayCapturePermission,
   validateDisplayMediaRequest
 } from "../../main/security";
 
@@ -20,6 +21,20 @@ describe("capture security policy", () => {
     expect(validateDisplayMediaRequest({ ...request, securityOrigin: "https://evil.example" }, true).reason).toBe("untrusted_origin");
     expect(validateDisplayMediaRequest({ ...request, selectedSourceId: undefined }, true).reason).toBe("source_not_selected");
     expect(validateDisplayMediaRequest({ ...request, selectedSourceId: "screen:1:0" }, true).reason).toBe("display_capture_denied");
+  });
+
+  it("allows only display-capture permission for a selected trusted window source", () => {
+    const permission = {
+      permission: "display-capture",
+      requestingOrigin: "http://127.0.0.1:5173/",
+      selectedSourceId: "window:12:0"
+    };
+
+    expect(validateDisplayCapturePermission(permission, true).allowed).toBe(true);
+    expect(validateDisplayCapturePermission({ ...permission, permission: "media" }, true).reason).toBe("permission_denied");
+    expect(validateDisplayCapturePermission({ ...permission, requestingOrigin: "https://evil.example" }, true).reason).toBe("untrusted_origin");
+    expect(validateDisplayCapturePermission({ ...permission, selectedSourceId: undefined }, true).reason).toBe("source_not_selected");
+    expect(validateDisplayCapturePermission({ ...permission, selectedSourceId: "screen:1:0" }, true).reason).toBe("display_capture_denied");
   });
 
   it("filters out AimTune and non-window sources", () => {

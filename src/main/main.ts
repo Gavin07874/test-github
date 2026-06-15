@@ -14,6 +14,7 @@ import {
   isAllowedExternalUrl,
   isCapturableWindowSource,
   isTrustedAppNavigation,
+  validateDisplayCapturePermission,
   validateDisplayMediaRequest
 } from "./security.js";
 
@@ -45,6 +46,20 @@ function captureAccessStatus() {
 
 function trustedIpcUrl(url?: string) {
   return Boolean(url && isTrustedAppNavigation(url, isDev));
+}
+
+function isAllowedCapturePermission(
+  permission: string,
+  url: string | undefined
+) {
+  return validateDisplayCapturePermission(
+    {
+      permission,
+      pageUrl: url,
+      selectedSourceId: selectedCaptureSourceId
+    },
+    isDev
+  ).allowed;
 }
 
 function createMainWindow() {
@@ -86,9 +101,18 @@ function createMainWindow() {
   });
 
   window.webContents.session.setPermissionRequestHandler(
-    (_webContents, _permission, callback) => callback(false)
+    (webContents, permission, callback, details) => {
+      const url = details.requestingUrl || webContents?.getURL() || window.webContents.getURL();
+      callback(isAllowedCapturePermission(permission, url));
+    }
   );
-  window.webContents.session.setPermissionCheckHandler(() => false);
+  window.webContents.session.setPermissionCheckHandler(
+    (webContents, permission, requestingOrigin) =>
+      isAllowedCapturePermission(
+        permission,
+        requestingOrigin || webContents?.getURL() || window.webContents.getURL()
+      )
+  );
   window.webContents.session.setDisplayMediaRequestHandler(
     (request, callback) => {
       const decision = validateDisplayMediaRequest(

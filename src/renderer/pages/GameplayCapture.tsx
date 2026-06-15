@@ -4,6 +4,7 @@ import {
   getScreenAccessStatus,
   isCaptureBridgeAvailable,
   listCapturableWindows,
+  selectCapturableWindow,
   startCapture,
   type CaptureController,
   type CaptureResult
@@ -62,9 +63,26 @@ export function GameplayCapture({
     return () => window.clearInterval(id);
   }, [status]);
 
-  async function start(source: CapturableWindowSource) {
+  async function chooseSource(source: CapturableWindowSource) {
     try {
       setSelected(source);
+      setError("");
+      await selectCapturableWindow(source);
+      setStatus("ready");
+    } catch (captureError) {
+      setSelected(undefined);
+      setStatus("error");
+      setError(captureError instanceof Error ? captureError.message : "That window could not be selected.");
+    }
+  }
+
+  async function start() {
+    if (!selected) {
+      setError("Choose a game or Remote Play window first.");
+      return;
+    }
+
+    try {
       setError("");
       setSampleCount(0);
       setLastMetric(undefined);
@@ -74,12 +92,12 @@ export function GameplayCapture({
         gameId,
         mode,
         settings,
-        source,
+        source: selected,
         onMetric(metric) {
           setLastMetric(metric);
           setSampleCount((count) => count + 1);
         },
-        onStatus(nextStatus, nextModelStatus) {
+          onStatus(nextStatus, nextModelStatus) {
           setStatus(nextStatus);
           if (nextModelStatus) setModelStatus(nextModelStatus);
         },
@@ -135,9 +153,9 @@ export function GameplayCapture({
           </div>
           <div className="card-list">
             {sources.length ? sources.map((source) => (
-              <button className={`choice-card ${selected?.id === source.id ? "is-selected" : ""}`} disabled={status === "running" || status === "paused"} key={source.id} onClick={() => start(source)}>
+              <button className={`choice-card ${selected?.id === source.id ? "is-selected" : ""}`} disabled={status === "running" || status === "paused"} key={source.id} onClick={() => void chooseSource(source)}>
                 <span>{source.name}</span>
-                <strong>{selected?.id === source.id ? "Selected" : "Start capture"}</strong>
+                <strong>{selected?.id === source.id ? "Selected" : "Select window"}</strong>
               </button>
             )) : <div className="empty-state">Open Fortnite, The Last of Us Part II Remote Play, or another game window, then refresh.</div>}
           </div>
@@ -156,6 +174,7 @@ export function GameplayCapture({
             <MetricCard label="Center motion" value={lastMetric ? `${Math.round(lastMetric.centerMotionScore)}%` : "N/A"} />
           </div>
           <div className="footer-actions">
+            <button className="button" disabled={!selected || status === "running" || status === "paused"} onClick={() => void start()}>Start Capture</button>
             <button className="button button--secondary" disabled={status !== "running" && status !== "paused"} onClick={togglePause}>
               {status === "paused" ? "Resume" : "Pause"}
             </button>

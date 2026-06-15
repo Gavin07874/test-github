@@ -15,6 +15,13 @@ export interface DisplayMediaPolicyRequest {
   selectedSourceId?: string;
 }
 
+export interface DisplayCapturePermissionRequest {
+  permission: string;
+  requestingOrigin?: string;
+  pageUrl?: string;
+  selectedSourceId?: string;
+}
+
 export function isAllowedExternalUrl(url: string) {
   try {
     const parsed = new URL(url);
@@ -82,6 +89,30 @@ export function validateDisplayMediaRequest(
   if (!request.selectedSourceId) {
     return { allowed: false, reason: "source_not_selected" };
   }
+  if (!isWindowSourceId(request.selectedSourceId)) {
+    return { allowed: false, reason: "display_capture_denied" };
+  }
+
+  return { allowed: true, reason: "allowed" };
+}
+
+export function validateDisplayCapturePermission(
+  request: DisplayCapturePermissionRequest,
+  isDev: boolean
+) {
+  if (request.permission !== "display-capture") {
+    return { allowed: false, reason: "permission_denied" };
+  }
+
+  const origin = request.requestingOrigin || request.pageUrl || "";
+  if (!isTrustedCaptureOrigin(origin, isDev)) {
+    return { allowed: false, reason: "untrusted_origin" };
+  }
+
+  if (!request.selectedSourceId) {
+    return { allowed: false, reason: "source_not_selected" };
+  }
+
   if (!isWindowSourceId(request.selectedSourceId)) {
     return { allowed: false, reason: "display_capture_denied" };
   }

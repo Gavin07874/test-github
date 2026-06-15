@@ -62,6 +62,16 @@ export async function getScreenAccessStatus() {
   return bridge()?.screenAccessStatus() ?? "unknown";
 }
 
+export async function selectCapturableWindow(source: CapturableWindowSource) {
+  const captureBridge = bridge();
+  if (!captureBridge) {
+    throw new Error("Selected-window capture is available in the AimTune desktop app.");
+  }
+
+  const selected = await captureBridge.selectSource(source.id);
+  if (!selected) throw new Error("That window is no longer available.");
+}
+
 function makeWorker() {
   return new Worker(new URL("../workers/visionWorker.ts", import.meta.url), {
     type: "module"
@@ -73,8 +83,6 @@ export async function startCapture(input: StartCaptureInput): Promise<CaptureCon
   if (!captureBridge || !navigator.mediaDevices?.getDisplayMedia) {
     throw new Error("Selected-window capture is available in the AimTune desktop app.");
   }
-  const selected = await captureBridge.selectSource(input.source.id);
-  if (!selected) throw new Error("That window is no longer available.");
 
   const stream = await navigator.mediaDevices.getDisplayMedia({
     video: {
