@@ -317,13 +317,23 @@ button:disabled {
   background: #f1ede6;
 }
 
+.button--danger {
+  border-color: rgba(185, 52, 44, 0.72);
+  color: #ffffff;
+  background: var(--danger);
+}
+
+.button--danger:hover:not(:disabled) {
+  background: #94271f;
+}
+
 .button--small {
   padding: 8px 12px;
 }
 
 .mode-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -432,6 +442,10 @@ button:disabled {
 }
 
 .panel--wide {
+  grid-column: 1 / -1;
+}
+
+.data-control-panel {
   grid-column: 1 / -1;
 }
 

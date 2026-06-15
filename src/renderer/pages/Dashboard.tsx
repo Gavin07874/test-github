@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CartesianGrid,
   Line,
@@ -19,6 +19,10 @@ import type {
   Session
 } from "../types";
 
+interface DashboardProps {
+  onResetData?: () => Promise<void> | void;
+}
+
 function average(values: number[]) {
   if (!values.length) return 0;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
@@ -28,42 +32,97 @@ function kd(stats: PostGameStats) {
   return stats.kills / Math.max(1, stats.deaths);
 }
 
-export function Dashboard() {
+export function Dashboard({ onResetData }: DashboardProps) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [stats, setStats] = useState<PostGameStats[]>([]);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [metrics, setMetrics] = useState<CalibrationMetrics[]>([]);
+  const [resetArmed, setResetArmed] = useState(false);
+  const [exportStatus, setExportStatus] = useState("Ready");
+
+  const loadDashboard = useCallback(async () => {
+    const [loadedSessions, loadedStats, loadedRecommendations, loadedMetrics] =
+      await Promise.all([
+        storageService.listSessions(),
+        storageService.listPostGameStats(),
+        storageService.listRecommendations(),
+        storageService.listCalibrationMetrics()
+      ]);
+    setSessions(loadedSessions);
+    setStats(loadedStats);
+    setRecommendations(loadedRecommendations);
+    setMetrics(loadedMetrics);
+  }, []);
 
   useEffect(() => {
-    async function load() {
-      const [loadedSessions, loadedStats, loadedRecommendations, loadedMetrics] =
-        await Promise.all([
-          storageService.listSessions(),
-          storageService.listPostGameStats(),
-          storageService.listRecommendations(),
-          storageService.listCalibrationMetrics()
-        ]);
-      setSessions(loadedSessions);
-      setStats(loadedStats);
-      setRecommendations(loadedRecommendations);
-      setMetrics(loadedMetrics);
+    void loadDashboard();
+  }, [loadDashboard]);
+
+  async function exportLocalSnapshot() {
+    const [
+      loadedSessions,
+      loadedStats,
+      loadedRecommendations,
+      loadedMetrics,
+      loadedSettings
+    ] = await Promise.all([
+      storageService.listSessions(),
+      storageService.listPostGameStats(),
+      storageService.listRecommendations(),
+      storageService.listCalibrationMetrics(),
+      storageService.listSettings()
+    ]);
+    const snapshot = {
+      exportedAt: new Date().toISOString(),
+      safetyBoundary: "Local AimTune AI data only. No game files or game memory.",
+      sessions: loadedSessions,
+      postGameStats: loadedStats,
+      recommendations: loadedRecommendations,
+      calibrationMetrics: loadedMetrics,
+      settings: loadedSettings
+    };
+    const blob = new Blob([JSON.stringify(snapshot, null, 2)], {
+      type: "application/json"
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `aimtune-export-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setExportStatus("Snapshot downloaded");
+  }
+
+  async function resetLocalData() {
+    if (!resetArmed) {
+      setResetArmed(true);
+      return;
     }
-    void load();
-  }, []);
+    await onResetData?.();
+    setResetArmed(false);
+    await loadDashboard();
+  }
 
   const calibrationComplete = metrics.length > 0;
   const visibleRecommendations = calibrationComplete ? recommendations : [];
 
   const summary = useMemo(() => {
-    const latestSensitivity = visibleRecommendations.find(
-      (recommendation) => recommendation.settingName === "Horizontal Sensitivity"
-    );
-    const latestAds = visibleRecommendations.find(
-      (recommendation) => recommendation.settingName === "ADS Sensitivity"
-    );
-    const latestDeadzone = visibleRecommendations.find(
-      (recommendation) => recommendation.settingName === "Right-stick Deadzone"
-    );
+    const findLatest = (terms: string[]) =>
+      visibleRecommendations.find((recommendation) => {
+        const setting = recommendation.settingName.toLowerCase();
+        return terms.some((term) => setting.includes(term));
+      });
+    const latestLook = findLatest([
+      "horizontal",
+      "look horizontal",
+      "look sensitivity x"
+    ]);
+    const latestAim = findLatest(["ads", "aiming sensitivity x"]);
+    const latestDeadzone = findLatest([
+      "right-stick",
+      "right stick",
+      "camera stick"
+    ]);
 
     return {
       totalSessions: sessions.length,
@@ -79,10 +138,10 @@ export function Dashboard() {
           .map((item) => item.headshotPercent)
           .filter((value): value is number => value !== undefined)
       ),
-      currentSensitivity: latestSensitivity
-        ? String(latestSensitivity.recommendedValue)
+      currentSensitivity: latestLook
+        ? String(latestLook.recommendedValue)
         : "N/A",
-      currentAdsSensitivity: latestAds ? String(latestAds.recommendedValue) : "N/A",
+      currentAdsSensitivity: latestAim ? String(latestAim.recommendedValue) : "N/A",
       currentDeadzone: latestDeadzone ? String(latestDeadzone.recommendedValue) : "N/A"
     };
   }, [calibrationComplete, sessions.length, stats, visibleRecommendations]);
@@ -117,7 +176,7 @@ export function Dashboard() {
       <div className="page-heading">
         <span className="eyebrow">Overview</span>
         <h2>Dashboard</h2>
-        <p>Session history, calibration status, recommendation trends, and core performance metrics.</p>
+        <p>Calibration status, recommendation trends, local history, and core performance metrics.</p>
       </div>
 
       <div className="stat-grid">
@@ -129,12 +188,34 @@ export function Dashboard() {
         <StatCard label="Average K/D" value={summary.averageKd.toFixed(2)} />
         <StatCard label="Average accuracy" value={`${summary.averageAccuracy.toFixed(1)}%`} />
         <StatCard label="Average headshot" value={`${summary.averageHeadshotPercent.toFixed(1)}%`} />
-        <StatCard label="Current horizontal" value={summary.currentSensitivity} />
-        <StatCard label="Current ADS" value={summary.currentAdsSensitivity} />
+        <StatCard label="Current look" value={summary.currentSensitivity} />
+        <StatCard label="Current aim" value={summary.currentAdsSensitivity} />
         <StatCard label="Current deadzone" value={summary.currentDeadzone} />
       </div>
 
       <div className="dashboard-grid">
+        <section className="panel data-control-panel">
+          <div className="panel__heading">
+            <span>Local data</span>
+            <strong>{exportStatus}</strong>
+          </div>
+          <p>
+            Export or clear AimTune's local IndexedDB data. This does not read,
+            edit, or transmit game files.
+          </p>
+          <div className="action-row">
+            <button className="button button--secondary" onClick={exportLocalSnapshot}>
+              Export local snapshot
+            </button>
+            <button
+              className={`button ${resetArmed ? "button--danger" : "button--secondary"}`}
+              onClick={resetLocalData}
+            >
+              {resetArmed ? "Click again to clear" : "Clear local data"}
+            </button>
+          </div>
+        </section>
+
         <section className="chart-panel">
           <div className="panel__heading">
             <span>Accuracy and K/D over sessions</span>
@@ -214,8 +295,8 @@ export function Dashboard() {
         </section>
       ) : (
         <section className="notice-panel">
-          No recommendations yet. Save Calibration Lab metrics first, then add
-          gameplay session input and optional post-game stats.
+          No recommendations yet. Save Calibration Lab metrics first; AimTune
+          only creates exact changes after real calibration data exists.
         </section>
       )}
     </main>

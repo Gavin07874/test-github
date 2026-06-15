@@ -2,15 +2,13 @@ import type {
   AppMode,
   CalibrationMetrics,
   CurrentSettings,
-  Recommendation,
-  Session
+  Recommendation
 } from "../types";
 
 interface WorkflowProgressProps {
   mode?: AppMode;
   settings?: CurrentSettings;
   calibrationMetrics?: CalibrationMetrics;
-  session?: Session;
   recommendations: Recommendation[];
 }
 
@@ -24,13 +22,17 @@ export function WorkflowProgress({
   mode,
   settings,
   calibrationMetrics,
-  session,
   recommendations
 }: WorkflowProgressProps) {
   const steps = [
     {
       label: "Mode",
       value: modeLabel(mode),
+      complete: Boolean(mode)
+    },
+    {
+      label: "Controller",
+      value: mode ? "Ready for Gamepad API test" : "Select mode first",
       complete: Boolean(mode)
     },
     {
@@ -42,11 +44,6 @@ export function WorkflowProgress({
       label: "Calibration",
       value: calibrationMetrics ? "Metrics saved" : "Run Calibration Lab",
       complete: Boolean(calibrationMetrics)
-    },
-    {
-      label: "Session",
-      value: session ? "Session created" : "Record controller input",
-      complete: Boolean(session)
     },
     {
       label: "Report",

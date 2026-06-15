@@ -37,6 +37,17 @@ function exactDelta(current: number, recommended: number) {
   return Number((recommended - current).toFixed(3));
 }
 
+function recommendationLabels(settings: CurrentSettings) {
+  const profile = getGameProfile(settings.gameName, settings.platform);
+  return {
+    horizontal: profile.labels.horizontalSensitivity,
+    vertical: profile.labels.verticalSensitivity,
+    ads: profile.labels.adsSensitivity,
+    rightDeadzone: profile.labels.rightStickDeadzone,
+    responseCurve: profile.labels.responseCurve
+  };
+}
+
 function includesAny(notes: string, terms: string[]) {
   const normalized = notes.toLowerCase();
   return terms.some((term) => normalized.includes(term));
@@ -205,7 +216,7 @@ function responseCurveRecommendation(
   return {
     id: crypto.randomUUID(),
     sessionId: settings.sessionId ?? "pending",
-    settingName: "Response Curve",
+    settingName: profile.labels.responseCurve,
     currentValue: current,
     recommendedValue: recommended,
     exactDelta: `${current} -> ${recommended}`,
@@ -245,6 +256,7 @@ export function generateRecommendations(input: OptimizerInput): Recommendation[]
     return recommendations;
   }
 
+  const labels = recommendationLabels(settings);
   const rightDeadzone = getSettingBounds(profile, "deadzone");
   let deadzoneDelta = 0;
   let deadzoneCause = "";
@@ -275,7 +287,7 @@ export function generateRecommendations(input: OptimizerInput): Recommendation[]
     );
     const recommendation = buildNumericRecommendation({
       sessionId,
-      settingName: "Right-stick Deadzone",
+      settingName: labels.rightDeadzone,
       currentValue: settings.rightStickDeadzone,
       recommendedValue: nextDeadzone,
       confidenceScore,
@@ -313,7 +325,7 @@ export function generateRecommendations(input: OptimizerInput): Recommendation[]
 
     const horizontalRecommendation = buildNumericRecommendation({
       sessionId,
-      settingName: "Horizontal Sensitivity",
+      settingName: labels.horizontal,
       currentValue: settings.horizontalSensitivity,
       recommendedValue: recommendedHorizontal,
       confidenceScore,
@@ -336,7 +348,7 @@ export function generateRecommendations(input: OptimizerInput): Recommendation[]
 
     const verticalRecommendation = buildNumericRecommendation({
       sessionId,
-      settingName: "Vertical Sensitivity",
+      settingName: labels.vertical,
       currentValue: settings.verticalSensitivity,
       recommendedValue: recommendedVertical,
       confidenceScore,
@@ -366,7 +378,7 @@ export function generateRecommendations(input: OptimizerInput): Recommendation[]
     );
     const adsRecommendation = buildNumericRecommendation({
       sessionId,
-      settingName: "ADS Sensitivity",
+      settingName: labels.ads,
       currentValue: settings.adsSensitivity,
       recommendedValue: recommendedAds,
       confidenceScore,

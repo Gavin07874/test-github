@@ -65,7 +65,7 @@ describe("precisionOptimizer", () => {
     });
 
     const horizontal = recommendations.find(
-      (item) => item.settingName === "Horizontal Sensitivity"
+      (item) => item.settingName === "Look Horizontal Speed"
     );
 
     expect(horizontal?.currentValue).toBe(40);
@@ -88,7 +88,7 @@ describe("precisionOptimizer", () => {
     });
 
     const deadzone = recommendations.find(
-      (item) => item.settingName === "Right-stick Deadzone"
+      (item) => item.settingName === "Right Stick Dead Zone"
     );
 
     expect(deadzone?.recommendedValue).toBe(0.1);
@@ -108,7 +108,7 @@ describe("precisionOptimizer", () => {
     });
 
     const horizontal = recommendations.find(
-      (item) => item.settingName === "Horizontal Sensitivity"
+      (item) => item.settingName === "Look Horizontal Speed"
     );
 
     expect(horizontal?.recommendedValue).toBe(39);
@@ -130,7 +130,7 @@ describe("precisionOptimizer", () => {
     });
 
     const deadzone = recommendations.find(
-      (item) => item.settingName === "Right-stick Deadzone"
+      (item) => item.settingName === "Right Stick Dead Zone"
     );
 
     expect(deadzone?.recommendedValue).toBe(0.5);
@@ -149,10 +149,59 @@ describe("precisionOptimizer", () => {
     });
 
     const horizontal = recommendations.find(
-      (item) => item.settingName === "Horizontal Sensitivity"
+      (item) => item.settingName === "Look Horizontal Speed"
     );
 
     expect(horizontal?.percentChange).toBe(-7.5);
     expect(horizontal?.severity).toBe("severe");
+  });
+
+  it("returns no recommendations before calibration metrics exist", () => {
+    const recommendations = generateRecommendations({
+      mode: "pc",
+      settings,
+      sessions
+    });
+
+    expect(recommendations).toEqual([]);
+  });
+
+  it("uses The Last of Us Part II setting labels in recommendations", () => {
+    const tlouSettings: CurrentSettings = {
+      ...settings,
+      id: "tlou-settings",
+      gameName: "The Last of Us Part II",
+      platform: "playstation",
+      horizontalSensitivity: 65,
+      verticalSensitivity: 65,
+      adsSensitivity: 55,
+      leftStickDeadzone: 0.1,
+      rightStickDeadzone: 0.08,
+      responseCurve: "Default",
+      aimingSensitivityY: 55,
+      scopedSensitivityX: 30,
+      scopedSensitivityY: 30,
+      aimingAccelerationScale: 5,
+      aimingRampPowerScale: 3,
+      weaponSwapInvert: false
+    };
+
+    const recommendations = generateRecommendations({
+      mode: "console_remote_play",
+      settings: tlouSettings,
+      calibrationMetrics: {
+        ...metrics,
+        rightStickDriftAverage: 0.09,
+        rightStickDriftMax: 0.14,
+        adsJitter: 0.16
+      },
+      sessions
+    });
+    const names = recommendations.map((item) => item.settingName);
+
+    expect(names).toContain("Look Sensitivity X");
+    expect(names).toContain("Look Sensitivity Y");
+    expect(names).toContain("Aiming Sensitivity X");
+    expect(names).toContain("Camera Stick Deadzone");
   });
 });

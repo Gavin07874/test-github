@@ -13,7 +13,7 @@ export function RecommendationReport({
   return (
     <main className="page">
       <div className="page-heading">
-        <span className="eyebrow">Step 7</span>
+        <span className="eyebrow">Step 5</span>
         <h2>Recommendation report</h2>
         <p>Exact setting changes generated only after Calibration Lab metrics exist.</p>
       </div>

@@ -11,9 +11,8 @@ export function Home({ onStart, onDashboard }: HomeProps) {
         <h1>AimTune AI</h1>
         <p className="lede">Exact controller settings calculated from your gameplay.</p>
         <p>
-          Measure controller input, run the Calibration Lab, record gameplay input,
-          and add optional match stats to produce exact setting changes backed by
-          real metrics.
+          Confirm controller telemetry, mirror your game settings, run the
+          Calibration Lab, and get exact setting changes backed by real metrics.
         </p>
         <div className="action-row">
           <button className="button" onClick={onStart}>
