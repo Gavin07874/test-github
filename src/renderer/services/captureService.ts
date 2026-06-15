@@ -42,8 +42,9 @@ interface StartCaptureInput {
 const width = 256;
 const height = 144;
 const intervalMs = 150;
-const wasmPath = "/mediapipe/wasm";
-const modelPath = "/models/efficientdet_lite0_uint8.tflite";
+function assetUrl(path: string) {
+  return new URL(path, window.location.href).toString();
+}
 
 function bridge() {
   return window.aimTune?.capture;
@@ -131,7 +132,11 @@ export async function startCapture(input: StartCaptureInput): Promise<CaptureCon
       input.onMetric?.(message.metric, message.detections);
     }
   };
-  worker.postMessage({ type: "init", wasmPath, modelPath });
+  worker.postMessage({
+    type: "init",
+    wasmPath: assetUrl("mediapipe/wasm"),
+    modelPath: assetUrl("models/efficientdet_lite0_uint8.tflite")
+  });
 
   function updateStatus(status: CaptureSession["status"]) {
     session.status = status;
