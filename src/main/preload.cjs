@@ -9,7 +9,10 @@ contextBridge.exposeInMainWorld(
     capture: Object.freeze({
       listWindowSources: () => ipcRenderer.invoke("capture:list-window-sources"),
       selectSource: (sourceId) => ipcRenderer.invoke("capture:select-source", sourceId),
-      screenAccessStatus: () => ipcRenderer.invoke("capture:screen-access-status")
+      armStart: (sourceId) => ipcRenderer.invoke("capture:arm-start", sourceId),
+      screenAccessStatus: () => ipcRenderer.invoke("capture:screen-access-status"),
+      diagnostics: () => ipcRenderer.invoke("capture:diagnostics"),
+      openScreenSettings: () => ipcRenderer.invoke("capture:open-screen-settings")
     })
   })
 );

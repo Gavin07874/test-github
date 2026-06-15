@@ -22,6 +22,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 let selectedCaptureSourceId: string | undefined;
+let captureStartArm: { sourceId: string; expiresAt: number } | undefined;
+let lastCaptureDecision: { phase: string; allowed: boolean; reason: string } | undefined;
 
 function asSafeSource(source: DesktopCapturerSource) {
   return {
@@ -48,18 +50,44 @@ function trustedIpcUrl(url?: string) {
   return Boolean(url && isTrustedAppNavigation(url, isDev));
 }
 
+function currentArmedSourceId() {
+  if (!captureStartArm) return undefined;
+  if (captureStartArm.expiresAt < Date.now()) {
+    captureStartArm = undefined;
+    return undefined;
+  }
+  return captureStartArm.sourceId;
+}
+
+function isCaptureStartArmed() {
+  return Boolean(
+    selectedCaptureSourceId &&
+      currentArmedSourceId() === selectedCaptureSourceId
+  );
+}
+
+function recordCaptureDecision(
+  phase: string,
+  decision: { allowed: boolean; reason: string }
+) {
+  lastCaptureDecision = { phase, allowed: decision.allowed, reason: decision.reason };
+  return decision.allowed;
+}
+
 function isAllowedCapturePermission(
   permission: string,
   url: string | undefined
 ) {
-  return validateDisplayCapturePermission(
+  const decision = validateDisplayCapturePermission(
     {
       permission,
       pageUrl: url,
-      selectedSourceId: selectedCaptureSourceId
+      selectedSourceId: selectedCaptureSourceId,
+      startTokenArmed: isCaptureStartArmed()
     },
     isDev
-  ).allowed;
+  );
+  return recordCaptureDecision("permission", decision);
 }
 
 function createMainWindow() {
@@ -121,12 +149,14 @@ function createMainWindow() {
           videoRequested: request.videoRequested,
           audioRequested: request.audioRequested,
           userGesture: request.userGesture,
-          selectedSourceId: selectedCaptureSourceId
+          selectedSourceId: selectedCaptureSourceId,
+          startTokenArmed: isCaptureStartArmed()
         },
         isDev
       );
 
-      if (!decision.allowed) {
+      if (!recordCaptureDecision("display-media", decision)) {
+        captureStartArm = undefined;
         callback({});
         return;
       }
@@ -136,13 +166,26 @@ function createMainWindow() {
           const source = sources.find((item) => item.id === selectedCaptureSourceId);
           if (!source) {
             selectedCaptureSourceId = undefined;
+            captureStartArm = undefined;
+            lastCaptureDecision = {
+              phase: "display-media",
+              allowed: false,
+              reason: "source_not_available"
+            };
             callback({});
             return;
           }
+          captureStartArm = undefined;
           callback({ video: source });
         })
         .catch(() => {
           selectedCaptureSourceId = undefined;
+          captureStartArm = undefined;
+          lastCaptureDecision = {
+            phase: "display-media",
+            allowed: false,
+            reason: "source_lookup_failed"
+          };
           callback({});
         });
     },
@@ -176,9 +219,51 @@ app.whenReady().then(() => {
     return exists;
   });
 
+  ipcMain.handle("capture:arm-start", async (event, sourceId: unknown) => {
+    if (!trustedIpcUrl(event.senderFrame?.url)) return false;
+    if (typeof sourceId !== "string") return false;
+    const sources = await listWindowSources();
+    const exists = sources.some((source) => source.id === sourceId);
+    if (!exists || sourceId !== selectedCaptureSourceId) {
+      captureStartArm = undefined;
+      return false;
+    }
+    captureStartArm = {
+      sourceId,
+      expiresAt: Date.now() + 5000
+    };
+    return true;
+  });
+
   ipcMain.handle("capture:screen-access-status", (event) => {
     if (!trustedIpcUrl(event.senderFrame?.url)) return "denied";
     return captureAccessStatus();
+  });
+
+  ipcMain.handle("capture:diagnostics", (event) => {
+    if (!trustedIpcUrl(event.senderFrame?.url)) {
+      return {
+        screenAccessStatus: "denied",
+        selectedSourceId: undefined,
+        startArmed: false,
+        lastDecision: { phase: "ipc", allowed: false, reason: "untrusted_origin" }
+      };
+    }
+    return {
+      screenAccessStatus: captureAccessStatus(),
+      selectedSourceId: selectedCaptureSourceId,
+      startArmed: isCaptureStartArmed(),
+      lastDecision: lastCaptureDecision
+    };
+  });
+
+  ipcMain.handle("capture:open-screen-settings", async (event) => {
+    if (!trustedIpcUrl(event.senderFrame?.url)) return false;
+    if (process.platform !== "darwin") return false;
+    await shell.openExternal(
+      "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+    );
+    return true;
   });
 
   createMainWindow();

@@ -680,6 +680,18 @@ input[type="range"] {
   background: rgba(214, 149, 0, 0.1);
 }
 
+.notice--stacked {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.notice--stacked span {
+  min-width: min(100%, 520px);
+}
+
 .recommendation-list {
   display: grid;
   gap: 14px;

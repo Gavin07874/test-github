@@ -13,6 +13,7 @@ export interface DisplayMediaPolicyRequest {
   audioRequested: boolean;
   userGesture: boolean;
   selectedSourceId?: string;
+  startTokenArmed?: boolean;
 }
 
 export interface DisplayCapturePermissionRequest {
@@ -20,6 +21,7 @@ export interface DisplayCapturePermissionRequest {
   requestingOrigin?: string;
   pageUrl?: string;
   selectedSourceId?: string;
+  startTokenArmed?: boolean;
 }
 
 export function isAllowedExternalUrl(url: string) {
@@ -74,7 +76,7 @@ export function validateDisplayMediaRequest(
   request: DisplayMediaPolicyRequest,
   isDev: boolean
 ) {
-  if (!request.userGesture) {
+  if (!request.userGesture && !request.startTokenArmed) {
     return { allowed: false, reason: "missing_user_gesture" };
   }
   if (!isTrustedCaptureOrigin(request.securityOrigin, isDev)) {
@@ -91,6 +93,9 @@ export function validateDisplayMediaRequest(
   }
   if (!isWindowSourceId(request.selectedSourceId)) {
     return { allowed: false, reason: "display_capture_denied" };
+  }
+  if (!request.startTokenArmed) {
+    return { allowed: false, reason: "capture_not_armed" };
   }
 
   return { allowed: true, reason: "allowed" };
@@ -115,6 +120,9 @@ export function validateDisplayCapturePermission(
 
   if (!isWindowSourceId(request.selectedSourceId)) {
     return { allowed: false, reason: "display_capture_denied" };
+  }
+  if (!request.startTokenArmed) {
+    return { allowed: false, reason: "capture_not_armed" };
   }
 
   return { allowed: true, reason: "allowed" };

@@ -29,6 +29,17 @@ export interface CaptureController {
   stop: (status?: CaptureSession["status"]) => Promise<CaptureResult>;
 }
 
+export interface CaptureDiagnostics {
+  screenAccessStatus: "not-determined" | "granted" | "denied" | "restricted" | "unknown";
+  selectedSourceId?: string;
+  startArmed: boolean;
+  lastDecision?: {
+    phase: string;
+    allowed: boolean;
+    reason: string;
+  };
+}
+
 interface StartCaptureInput {
   gameId: GameId;
   mode: AppMode;
@@ -62,6 +73,17 @@ export async function getScreenAccessStatus() {
   return bridge()?.screenAccessStatus() ?? "unknown";
 }
 
+export async function getCaptureDiagnostics(): Promise<CaptureDiagnostics> {
+  return bridge()?.diagnostics() ?? {
+    screenAccessStatus: "unknown",
+    startArmed: false
+  };
+}
+
+export async function openScreenRecordingSettings() {
+  return bridge()?.openScreenSettings() ?? false;
+}
+
 export async function selectCapturableWindow(source: CapturableWindowSource) {
   const captureBridge = bridge();
   if (!captureBridge) {
@@ -70,6 +92,22 @@ export async function selectCapturableWindow(source: CapturableWindowSource) {
 
   const selected = await captureBridge.selectSource(source.id);
   if (!selected) throw new Error("That window is no longer available.");
+}
+
+function formatCaptureError(error: unknown, diagnostics: CaptureDiagnostics) {
+  const status = diagnostics.screenAccessStatus;
+  if (status === "denied" || status === "restricted" || status === "not-determined") {
+    return "macOS is blocking Screen Recording for AimTune. Open Screen Recording settings, enable Electron or AimTune AI, then fully quit and reopen AimTune.";
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  const browserDenied = /denied|notallowed|permission/i.test(message);
+  if (browserDenied) {
+    const reason = diagnostics.lastDecision?.reason ?? "system_permission_denied";
+    return `Capture was denied by ${diagnostics.lastDecision?.phase ?? "macOS/Electron"} (${reason}). Re-select the Remote Play window and press Start Capture again.`;
+  }
+
+  return message || "Capture could not start.";
 }
 
 function makeWorker() {
@@ -84,14 +122,23 @@ export async function startCapture(input: StartCaptureInput): Promise<CaptureCon
     throw new Error("Selected-window capture is available in the AimTune desktop app.");
   }
 
-  const stream = await navigator.mediaDevices.getDisplayMedia({
-    video: {
-      frameRate: { ideal: 8, max: 10 },
-      width: { ideal: 1280 },
-      height: { ideal: 720 }
-    },
-    audio: false
-  });
+  const armed = await captureBridge.armStart(input.source.id);
+  if (!armed) throw new Error("Re-select the game or Remote Play window, then press Start Capture again.");
+
+  let stream: MediaStream;
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({
+      video: {
+        frameRate: { ideal: 8, max: 10 },
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      },
+      audio: false
+    });
+  } catch (error) {
+    const diagnostics = await getCaptureDiagnostics();
+    throw new Error(formatCaptureError(error, diagnostics));
+  }
 
   const sessionId = makeId("capture-session");
   const startedAtMs = Date.now();

@@ -4,6 +4,7 @@ import {
   getScreenAccessStatus,
   isCaptureBridgeAvailable,
   listCapturableWindows,
+  openScreenRecordingSettings,
   selectCapturableWindow,
   startCapture,
   type CaptureController,
@@ -38,6 +39,12 @@ export function GameplayCapture({
   const controllerRef = useRef<CaptureController | undefined>(undefined);
   const startedAtRef = useRef<number | undefined>(undefined);
   const nativeCapture = isCaptureBridgeAvailable();
+  const needsScreenPermission = nativeCapture && (
+    screenAccess === "denied" ||
+    screenAccess === "restricted" ||
+    screenAccess === "not-determined"
+  );
+  const permissionError = /screen recording|permission|denied|macos/i.test(error);
 
   const signalQuality = useMemo(
     () => (lastMetric ? `${Math.round(lastMetric.reticleStabilityScore)}%` : "N/A"),
@@ -48,6 +55,11 @@ export function GameplayCapture({
     const [access, windows] = await Promise.all([getScreenAccessStatus(), listCapturableWindows()]);
     setScreenAccess(access);
     setSources(windows);
+  }
+
+  async function openPermissionSettings() {
+    await openScreenRecordingSettings();
+    await refresh();
   }
 
   useEffect(() => {
@@ -110,6 +122,7 @@ export function GameplayCapture({
     } catch (captureError) {
       setStatus("error");
       setError(captureError instanceof Error ? captureError.message : "Capture could not start.");
+      await refresh();
     }
   }
 
@@ -141,10 +154,20 @@ export function GameplayCapture({
       {!nativeCapture ? (
         <section className="notice notice--warn">Selected-window capture works in the Electron app. Browser preview cannot access the preload bridge.</section>
       ) : null}
-      {screenAccess === "denied" || screenAccess === "restricted" ? (
-        <section className="notice notice--warn">macOS Screen Recording permission is missing. Enable AimTune AI in System Settings, Privacy & Security, Screen Recording.</section>
+      {needsScreenPermission ? (
+        <section className="notice notice--warn notice--stacked">
+          <span>macOS Screen Recording permission is not ready. Enable Electron or AimTune AI in System Settings, Privacy & Security, Screen Recording, then fully quit and reopen AimTune.</span>
+          <button className="button button--secondary button--small" onClick={() => void openPermissionSettings()}>Open Screen Recording Settings</button>
+        </section>
       ) : null}
-      {error ? <section className="notice notice--warn">{error}</section> : null}
+      {error ? (
+        <section className="notice notice--warn notice--stacked">
+          <span>{error}</span>
+          {permissionError ? (
+            <button className="button button--secondary button--small" onClick={() => void openPermissionSettings()}>Open Screen Recording Settings</button>
+          ) : null}
+        </section>
+      ) : null}
       <section className="capture-grid">
         <div className="panel">
           <div className="panel-heading">
