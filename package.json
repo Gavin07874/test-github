@@ -1,0 +1,57 @@
+{
+  "name": "aimtune-ai",
+  "version": "0.1.0",
+  "description": "Privacy-first controller tuning from calibration, telemetry, and local selected-window gameplay analysis.",
+  "main": "dist-electron/main/main.js",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:renderer": "vite --host 127.0.0.1 --port 5173",
+    "dev:main": "tsc -p tsconfig.electron.json --watch --preserveWatchOutput",
+    "build:main": "tsc -p tsconfig.electron.json && node scripts/copy-preload.mjs",
+    "build:renderer": "vite build",
+    "typecheck": "tsc -p tsconfig.renderer.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
+    "build": "npm run typecheck && npm run build:renderer && npm run build:main",
+    "test": "vitest run",
+    "dist": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "^0.10.35",
+    "@vitejs/plugin-react": "^5.1.1",
+    "dexie": "^4.2.1",
+    "electron": "^39.2.7",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "recharts": "^3.5.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.2",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "electron-builder": "^26.0.12",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.16",
+    "vitest": "^4.0.15"
+  },
+  "build": {
+    "appId": "ai.aimtune.desktop",
+    "productName": "AimTune AI",
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "public/**",
+      "package.json"
+    ],
+    "directories": {
+      "buildResources": "build",
+      "output": "release"
+    },
+    "mac": {
+      "category": "public.app-category.utilities"
+    },
+    "win": {
+      "target": "nsis"
+    }
+  }
+}
